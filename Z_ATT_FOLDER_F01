@@ -1,0 +1,219 @@
+*&---------------------------------------------------------------------*
+*& Include          Z_UPD_FOLDER_F01
+*&---------------------------------------------------------------------*
+
+FORM open_file_dialog USING p_path.
+
+*  DATA: ls_file_table LIKE LINE OF gt_file_table,
+*        lv_rc         TYPE i.
+*
+*  CLEAR p_path.
+*  REFRESH: gt_file_table.
+*
+*  CALL METHOD cl_gui_frontend_services=>file_open_dialog
+*    EXPORTING
+*      window_title   = 'Select File'
+**     default_filename = '*.pdf'
+*      multiselection = 'X'
+*    CHANGING
+*      file_table     = gt_file_table
+*      rc             = lv_rc.
+*
+*  READ TABLE gt_file_table INDEX 1 INTO ls_file_table.
+*  p_path = ls_file_table-filename.
+*
+*data:lv_string.
+CALL METHOD cl_gui_frontend_services=>directory_browse
+  CHANGING
+     selected_folder      = p_path
+*  EXCEPTIONS
+*    cntl_error           = 1                " Control error
+*    error_no_gui         = 2                " No GUI available
+*    not_supported_by_gui = 3                " GUI does not support this
+*    others               = 4
+  .
+IF SY-SUBRC <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*   WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+ENDIF.
+
+ENDFORM.
+
+FORM get_files_directory USING p_path.
+ TRY.
+
+      CALL METHOD cl_gui_frontend_services=>directory_list_files
+        EXPORTING
+          directory                   = p_path
+*         filter                      = '*.csv'  "lv_type
+        CHANGING
+          file_table                  = it_files_tab[]
+          count                       = gv_count
+        EXCEPTIONS
+          cntl_error                  = 1
+          directory_list_files_failed = 2
+          wrong_parameter             = 3
+          error_no_gui                = 4
+          not_supported_by_gui        = 5
+          OTHERS                      = 6.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ENDIF.
+    CATCH cx_root.
+
+  ENDTRY.
+ENDFORM.
+
+FORM upload_file_data USING it_files_tab TYPE ty_t_ftab.
+
+  LOOP AT it_files_tab INTO DATA(wa_files) .
+
+
+
+    CLEAR: gv_filename, it_text, gv_len.
+    CONCATENATE p_path wa_files INTO gv_filename SEPARATED BY '\'.
+
+    CALL METHOD cl_gui_frontend_services=>gui_upload
+      EXPORTING
+        filename                = gv_filename
+        filetype                = 'BIN'
+      IMPORTING
+        filelength              = gv_len
+      CHANGING
+        data_tab                = it_text
+      EXCEPTIONS
+        file_open_error         = 1
+        file_read_error         = 2
+        no_batch                = 3
+        gui_refuse_filetransfer = 4
+        invalid_type            = 5
+        no_authority            = 6
+        unknown_error           = 7
+        bad_data_format         = 8
+        header_not_allowed      = 9
+        separator_not_allowed   = 10
+        header_too_long         = 11
+        unknown_dp_error        = 12
+        access_denied           = 13
+        dp_out_of_memory        = 14
+        disk_full               = 15
+        dp_timeout              = 16
+        not_supported_by_gui    = 17
+        error_no_gui            = 18
+        OTHERS                  = 19.
+    IF sy-subrc <> 0.
+*   Implement suitable error handling here
+      CONTINUE.
+    ENDIF.
+
+    PERFORM convert_bin_to_string.
+    PERFORM call_api USING wa_files.
+*    PERFORM al11_upload.
+
+  ENDLOOP.
+  COMMIT WORK.
+ENDFORM.
+
+FORM al11_upload.
+
+  DATA: lv_data TYPE string,
+        lv_file TYPE string.
+
+*Upload data to AL11
+  lv_file = '/iface/SSDP/200/POC/TROUBLE.pdf'.
+  OPEN DATASET lv_file FOR OUTPUT IN BINARY MODE.
+  IF sy-subrc IS INITIAL.
+    LOOP AT it_text INTO DATA(ls_text).
+      lv_data = ls_text-line.
+      TRANSFER lv_data TO lv_file.
+      CLEAR: ls_text.
+    ENDLOOP.
+  ENDIF.
+  CLOSE DATASET lv_file.
+
+ENDFORM.
+
+FORM  convert_bin_to_string.
+
+  CALL FUNCTION 'SCMS_BINARY_TO_XSTRING'
+    EXPORTING
+      input_length = gv_len
+    IMPORTING
+      buffer       = gv_file
+    TABLES
+      binary_tab   = it_text
+    EXCEPTIONS
+      failed       = 1
+      OTHERS       = 2.
+
+
+ENDFORM.
+
+FORM call_api USING wa_files.
+  TYPES:
+    "! <p class="shorttext synchronized" lang="en">Media Type Information</p>
+    BEGIN OF ty_s_media_resource.
+      INCLUDE TYPE /iwbep/if_mgw_core_srv_runtime=>ty_s_media_resource.
+  TYPES:
+    END OF ty_s_media_resource .
+
+  DATA:lv_mimetype               TYPE skwf_mime,
+       lv_skwf_filnm             TYPE skwf_filnm,
+       lo_att_ser                TYPE REF TO cl_attachment_service_impl,
+       lv_semanticobject         TYPE        char40,
+       ls_media_resource         TYPE        ty_s_media_resource,
+       lv_businessobjecttypename TYPE        char40,
+       lv_linkedsapobjectkey     TYPE        objky,
+       lv_filename               TYPE        filep,
+       lv_slug                   TYPE        string,
+       ls_attachment_content     TYPE        odata_cv_s_attachment.
+
+
+  lv_skwf_filnm = wa_files.
+
+  CALL FUNCTION 'SKWF_MIMETYPE_OF_FILE_GET'
+    EXPORTING
+      filename = lv_skwf_filnm
+    IMPORTING
+      mimetype = lv_mimetype.
+
+*  ls_media_resource-mime_type = lv_mimetype.
+*  ls_media_resource-value = gv_file.
+*  lv_businessobjecttypename  = COND #( WHEN r_rfq = abap_true THEN 'EKKO_RFQ'
+*                                       WHEN r_qtn  = abap_true THEN 'EKKO_QTN'
+*                                       WHEN r_cont = abap_true THEN 'BUS2014' ).
+*  lv_linkedsapobjectkey = cond #( when p_doc is NOT INITIAL then p_doc else wa_files(10) ).
+*  lv_slug  = wa_files.
+
+  TRY.
+      CREATE OBJECT lo_att_ser.
+      IF lo_att_ser IS BOUND.
+
+        CALL METHOD lo_att_ser->if_attachment_service~create_attachment
+          EXPORTING
+            is_media_resource         = VALUE #( mime_type = lv_mimetype
+                                                  value = gv_file )
+            iv_businessobjecttypename = COND #( WHEN r_rfq = abap_true THEN 'EKKO_RFQ'
+                                      WHEN r_qtn  = abap_true THEN 'EKKO_QTN'
+                                      WHEN r_cont = abap_true THEN 'BUS2014' )
+            iv_linkedsapobjectkey     =  wa_files(10)
+            iv_slug                   = CONV #( wa_files )
+          IMPORTING
+            es_attachment_content     = ls_attachment_content.
+
+      ENDIF.
+*      COMMIT WORK.
+
+    CATCH: cx_odata_cv_attach_exception cx_odata_cv_db_exception cx_odata_cv_base_exception INTO DATA(lx_cv_attach).
+*      RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+*        EXPORTING
+*          previous = lx_cv_attach.
+  ENDTRY.
+
+
+
+
+
+  CLEAR lv_businessobjecttypename.
+
+ENDFORM.

@@ -1,0 +1,22 @@
+*&---------------------------------------------------------------------*
+*& Report Z_UPD_FOLDER
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT z_attach_file.
+
+INCLUDE z_att_folder_top.
+
+INCLUDE z_att_folder_sel.
+
+INCLUDE z_att_folder_f01.
+
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_path.
+
+  PERFORM open_file_dialog USING p_path.                            "Open file upload dialog box
+
+
+START-OF-SELECTION.
+  PERFORM get_files_directory USING p_path.                        "Get files from Directory
+  PERFORM upload_file_data USING it_files_tab.                     "Upload file data

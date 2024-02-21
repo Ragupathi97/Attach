@@ -1,0 +1,26 @@
+*&---------------------------------------------------------------------*
+*& Include          Z_UPD_FOLDER_TOP
+*&---------------------------------------------------------------------*
+
+TYPES: ty_ftab   TYPE char255,
+       ty_t_ftab TYPE STANDARD TABLE OF ty_ftab.
+
+DATA: it_files_tab TYPE ty_t_ftab,
+      gv_count     TYPE  i,
+      gv_filename   TYPE string,
+      it_files     TYPE TABLE OF string,
+      it_text      TYPE TABLE OF w3html.
+*      lv_directory TYPE string VALUE 'C:\Users\9004085923\Desktop\Fol_Upd',
+*      lv_type      TYPE string VALUE '*.csv'.
+
+DATA: gt_file_table     TYPE filetable,   "Uploaded file information
+      gt_content        TYPE soli_tab,    "Uploaded files content
+      gs_fol_id         TYPE soodk,       "Folder ID
+      gs_obj_id         TYPE soodk,       "Object ID
+      gv_len           TYPE i,
+      gv_file           TYPE xstring,
+      gt_binary_content TYPE solix_tab,
+      gt_datadown TYPE xstring.
+
+DATA: gv_ext   TYPE sood1-file_ext,   "File extension
+      gv_fname TYPE sood1-objdes.     "File name
